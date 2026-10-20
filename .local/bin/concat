@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# concat — concatena ricorsivamente i file di una cartella in un unico file
+# con intestazioni e ignore tipo .gitignore.
+#
+# Uso:
+#   concat [opzioni] <cartella> [file_output]
+#   concat -h
+#
+# Licenza: MIT
+set -eo pipefail
+
+# ---------- Ignore di default ----------
+DEFAULT_IGNORE_DIRS=(
+    .git .hg .svn
+    __pycache__ .mypy_cache .pytest_cache .ruff_cache .tox
+    node_modules .venv venv
+    .idea .vscode
+    dist build target out
+    .next .nuxt .parcel-cache .turbo
+    .cache
+)
+
+DEFAULT_IGNORE_FILES=(
+    .DS_Store Thumbs.db
+    '*.pyc' '*.pyo'
+    '*.swp' '*.swo' '*~'
+)
+
+# ---------- Helper ----------
+usage() {
+    cat <<EOF
+Uso: $(basename "$0") [opzioni] <cartella> [file_output]
+
+Opzioni:
+  -x, --exclude-dir NAME     Esclude una cartella (ripetibile)
+  -X, --exclude-file GLOB    Esclude un pattern sul nome del file (ripetibile)
+  -P, --exclude-path GLOB    Esclude un pattern sul percorso completo (ripetibile)
+                             Esempio: -P '*/pino/*.log' esclude solo i .log dentro pino/
+  -i, --include GLOB         Include SOLO i file che matchano (ripetibile)
+  -g, --gitignore            Legge i pattern da .gitignore nella cartella radice
+  -a, --all                  Disabilita gli ignore di default
+  -n, --dry-run              Mostra i file che verrebbero inclusi, senza scrivere
+  -h, --help                 Mostra questo aiuto
+
+Note:
+  -x usa find -name (solo basename della cartella)
+  -X usa find -name (solo basename del file)
+  -P usa find -path (percorso completo: metti SEMPRE il pattern tra apici singoli)
+  -i usa find -name (solo basename del file): se presente, gli altri -X/-P
+     restano validi ma -i agisce come filtro di inclusione
+EOF
+}
+
+# ---------- Parsing CLI ----------
+EXTRA_DIRS=()
+EXTRA_FILES=()
+EXTRA_PATHS=()
+INCLUDE_PATTERNS=()
+USE_DEFAULT=1
+USE_GITIGNORE=0
+DRY_RUN=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -x|--exclude-dir)   EXTRA_DIRS+=("$2");  shift 2 ;;
+        -X|--exclude-file)  EXTRA_FILES+=("$2"); shift 2 ;;
+        -P|--exclude-path)  EXTRA_PATHS+=("$2"); shift 2 ;;
+        -i|--include)       INCLUDE_PATTERNS+=("$2"); shift 2 ;;
+        -g|--gitignore)     USE_GITIGNORE=1;     shift ;;
+        -a|--all)           USE_DEFAULT=0;       shift ;;
+        -n|--dry-run)       DRY_RUN=1;           shift ;;
+        -h|--help)          usage; exit 0 ;;
+        --)                 shift; break ;;
+        -*) echo "Opzione sconosciuta: $1" >&2; usage >&2; exit 1 ;;
+        *)  break ;;
+    esac
+done
+
+if [ $# -lt 1 ]; then
+    usage >&2
+    exit 1
+fi
+
+DIR="$1"
+OUT="${2:-output.txt}"
+
+if [ ! -d "$DIR" ]; then
+    echo "Errore: '$DIR' non è una cartella" >&2
+    exit 1
+fi
+
+# ---------- Liste finali ----------
+IGNORE_DIRS=()
+IGNORE_FILES=()
+IGNORE_PATHS=()
+
+if [ "$USE_DEFAULT" -eq 1 ]; then
+    IGNORE_DIRS+=("${DEFAULT_IGNORE_DIRS[@]+"${DEFAULT_IGNORE_DIRS[@]}"}")
+    IGNORE_FILES+=("${DEFAULT_IGNORE_FILES[@]+"${DEFAULT_IGNORE_FILES[@]}"}")
+fi
+
+IGNORE_DIRS+=("${EXTRA_DIRS[@]+"${EXTRA_DIRS[@]}"}")
+IGNORE_FILES+=("${EXTRA_FILES[@]+"${EXTRA_FILES[@]}"}")
+IGNORE_PATHS+=("${EXTRA_PATHS[@]+"${EXTRA_PATHS[@]}"}")
+
+# Parse semplificato di .gitignore (solo pattern semplici)
+if [ "$USE_GITIGNORE" -eq 1 ] && [ -f "$DIR/.gitignore" ]; then
+    while IFS= read -r line; do
+        line="${line%%#*}"                              # rimuovi commenti
+        line="${line%"${line##*[![:space:]]}"}"         # rtrim spazi
+        [ -z "$line" ] && continue
+        case "$line" in
+            '!'*) continue ;;                           # skip negazioni
+            '/'*|*'**'*) continue ;;                    # skip pattern complessi
+            */) IGNORE_DIRS+=("${line%/}") ;;
+            *)  IGNORE_FILES+=("$line") ;;
+        esac
+    done < "$DIR/.gitignore"
+fi
+
+# ---------- Costruzione espressione find ----------
+# prune per directory
+prune_expr=()
+first=1
+for d in "${IGNORE_DIRS[@]}"; do
+    [ -z "$d" ] && continue
+    if [ $first -eq 1 ]; then prune_expr+=(-name "$d"); first=0
+    else                      prune_expr+=(-o -name "$d"); fi
+done
+
+# -name per file
+file_expr=()
+first=1
+for f in "${IGNORE_FILES[@]}"; do
+    [ -z "$f" ] && continue
+    if [ $first -eq 1 ]; then file_expr+=(-name "$f"); first=0
+    else                      file_expr+=(-o -name "$f"); fi
+done
+
+# -path per percorsi
+path_expr=()
+first=1
+for p in "${IGNORE_PATHS[@]}"; do
+    [ -z "$p" ] && continue
+    if [ $first -eq 1 ]; then path_expr+=(-path "$p"); first=0
+    else                      path_expr+=(-o -path "$p"); fi
+done
+
+# -name per include (whitelist)
+include_expr=()
+first=1
+for i in "${INCLUDE_PATTERNS[@]}"; do
+    [ -z "$i" ] && continue
+    if [ $first -eq 1 ]; then include_expr+=(-name "$i"); first=0
+    else                      include_expr+=(-o -name "$i"); fi
+done
+
+find_cmd=(find "$DIR")
+
+# prune delle directory da ignorare
+if [ ${#prune_expr[@]} -gt 0 ]; then
+    find_cmd+=( \( -type d \( "${prune_expr[@]}" \) -prune \) -o )
+fi
+
+find_cmd+=( \( -type f )
+
+# whitelist (se richiesta)
+if [ ${#include_expr[@]} -gt 0 ]; then
+    find_cmd+=( \( "${include_expr[@]}" \) )
+fi
+
+# esclusioni per nome file
+if [ ${#file_expr[@]} -gt 0 ]; then
+    find_cmd+=( ! \( "${file_expr[@]}" \) )
+fi
+
+# esclusioni per percorso
+if [ ${#path_expr[@]} -gt 0 ]; then
+    find_cmd+=( ! \( "${path_expr[@]}" \) )
+fi
+
+find_cmd+=( -print0 \) )
+
+# sort -z: usa GNU/BSD sort se supporta NUL, altrimenti cat
+if echo | sort -z >/dev/null 2>&1; then SORT_CMD=(sort -z); else SORT_CMD=(cat); fi
+
+# ---------- Dry-run ----------
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "# File che verrebbero inclusi:"
+    "${find_cmd[@]}" | "${SORT_CMD[@]}" | while IFS= read -r -d '' f; do
+        echo "$f"
+    done
+    exit 0
+fi
+
+# ---------- Scrittura su file temporaneo, poi move ----------
+TMP_OUT="$(mktemp)"
+trap 'rm -f "$TMP_OUT"' EXIT
+
+"${find_cmd[@]}" | "${SORT_CMD[@]}" | while IFS= read -r -d '' file; do
+    {
+        printf '\n===== %s =====\n\n' "$file"
+        cat -- "$file"
+        printf '\n'
+    } >> "$TMP_OUT"
+done
+
+# ---------- Tree in coda (grafico, filtrato, coerente con gli ignore) ----------
+{
+    printf '\n===== TREE =====\n\n'
+    "${find_cmd[@]}" | "${SORT_CMD[@]}" | while IFS= read -r -d '' f; do
+        printf '%s\n' "${f#"$DIR"/}"
+    done | awk -F/ '
+    {
+        path = ""
+        for (i = 1; i <= NF; i++) {
+            path = (i == 1) ? $i : path "/" $i
+            if (!(path in seen)) {
+                seen[path] = 1
+                indent = ""
+                for (j = 1; j < i; j++) indent = indent "    "
+                print indent "├── " $i
+            }
+        }
+    }'
+    printf '\n'
+} >> "$TMP_OUT"
+
+# DEBUG: riepilogo
+FILE_COUNT=$(grep -c '^===== ' "$TMP_OUT" 2>/dev/null || echo 0)
+if [ "${DEBUG:-0}" = "1" ]; then
+    echo "DEBUG: file inclusi: $FILE_COUNT" >&2
+    echo "DEBUG: dimensione output: $(wc -c < "$TMP_OUT") byte" >&2
+fi
+
+if [ "$FILE_COUNT" -eq 0 ]; then
+    echo "Attenzione: nessun file da includere, output non creato." >&2
+    exit 1
+fi
+
+mv "$TMP_OUT" "$OUT"
+trap - EXIT
+
+echo "Fatto: $OUT ($FILE_COUNT file)"
