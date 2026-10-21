@@ -1,0 +1,178 @@
+.TH CONCAT 1 "2026-10-21" "concat 1.0" "User Commands"
+.SH NOME
+concat \- concatena ricorsivamente i file di una cartella in un unico file
+.SH SINTASSI
+.B concat
+[\fIOPZIONI\fR] \fICARTELLA\fR [\fIFILE_OUTPUT\fR]
+.br
+.B concat
+\fB\-h\fR
+.SH DESCRIZIONE
+.B concat
+raccoglie ricorsivamente i file regolari contenuti in
+\fICARTELLA\fR e li scrive in un unico file di output
+(default: \fBoutput.txt\fR). Prima del contenuto di ogni file viene
+inserita un'intestazione nella forma:
+.nf
+
+    ===== percorso/del/file =====
+
+.fi
+Al termine viene appeso un albero (sezione \fBTREE\fR) con la struttura
+delle sole directory e dei soli file effettivamente inclusi.
+.PP
+L'ordine dei file è deterministico (ordinamento per percorso).
+Se non viene trovato alcun file, l'output non viene creato e lo
+script esce con stato 1.
+.SH OPZIONI
+.TP
+\fB\-x\fR, \fB\-\-exclude\-dir\fR \fINOME\fR
+Esclude le directory il cui nome base corrisponde a \fINOME\fR
+(ripetibile). Usa \fBfind \-name\fR: agisce solo sul basename,
+non sul percorso completo.
+.TP
+\fB\-X\fR, \fB\-\-exclude\-file\fR \fIGLOB\fR
+Esclude i file il cui nome base corrisponde a \fIGLOB\fR
+(ripetibile). Accetta i wildcard di \fBfind \-name\fR:
+\fB*\fR, \fB?\fR, \fB[...]\fR.
+.TP
+\fB\-P\fR, \fB\-\-exclude\-path\fR \fIGLOB\fR
+Esclude i file il cui percorso completo corrisponde a \fIGLOB\fR
+(ripetibile). Usa \fBfind \-path\fR. Consigliato mettere sempre
+il pattern tra apici singoli. Esempio:
+\fB\-P '*/pino/*.log'\fR.
+.TP
+\fB\-i\fR, \fB\-\-include\fR \fIGLOB\fR
+Whitelist: include solo i file il cui nome base corrisponde a
+\fIGLOB\fR (ripetibile, OR tra più pattern). Le esclusioni
+\fB\-X\fR/\fB\-P\fR restano comunque applicate.
+.TP
+\fB\-g\fR, \fB\-\-gitignore\fR
+Legge i pattern da \fB.gitignore\fR nella radice di \fICARTELLA\fR
+e li aggiunge alle esclusioni. Analisi semplificata: commenti,
+righe vuote, negazioni (\fB!\fR) e pattern complessi (inizio con
+\fB/\fR o contenenti \fB**\fR) sono ignorati.
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+Disabilita gli ignore predefiniti. Le opzioni \fB\-x\fR, \fB\-X\fR,
+\fB\-P\fR, \fB\-g\fR restano applicate.
+.TP
+\fB\-n\fR, \fB\-\-dry\-run\fR
+Mostra sulla stdout l'elenco dei file che verrebbero inclusi,
+senza creare né modificare il file di output.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Mostra un riepilogo delle opzioni ed esce.
+.TP
+\fB\-\-\fR
+Termina il parsing delle opzioni: i parametri successivi sono
+trattati come \fICARTELLA\fR e \fIFILE_OUTPUT\fR.
+.SH "IGNORE DI DEFAULT"
+Directory:
+.nf
+
+    .git .hg .svn
+    __pycache__ .mypy_cache .pytest_cache .ruff_cache .tox
+    node_modules .venv venv
+    .idea .vscode
+    dist build target out
+    .next .nuxt .parcel-cache .turbo
+    .cache
+
+.fi
+File:
+.nf
+
+    .DS_Store Thumbs.db
+    *.pyc *.pyo
+    *.swp *.swo *~
+
+.fi
+.SH ESEMPI
+Uso minimo (crea \fBoutput.txt\fR nella directory corrente):
+.nf
+
+    $ concat ~/progetto
+
+.fi
+File di output personalizzato:
+.nf
+
+    $ concat ~/progetto progetto.txt
+
+.fi
+Vedere cosa verrebbe incluso (dry\-run):
+.nf
+
+    $ concat \-n ~/progetto
+
+.fi
+Escludere per nome file e per percorso:
+.nf
+
+    $ concat \-X '*.log' \-P '*/pino/*.tmp' ~/progetto
+
+.fi
+Solo file Python e Markdown:
+.nf
+
+    $ concat \-i '*.py' \-i '*.md' ~/progetto out.txt
+
+.fi
+Rispettare il .gitignore:
+.nf
+
+    $ concat \-g ~/progetto
+
+.fi
+Includere tutto (nessun ignore di default):
+.nf
+
+    $ concat \-a ~/progetto tutto.txt
+
+.fi
+Combinare: solo Python, escludendo i test:
+.nf
+
+    $ concat \-i '*.py' \-X '*test*' ~/progetto
+
+.fi
+.SH "STATO DI USCITA"
+.TP
+.B 0
+Successo.
+.TP
+.B 1
+Errore (cartella inesistente, nessun file trovato, opzione
+sconosciuta).
+.SH "VARIABILI D'AMBIENTE"
+.TP
+.B DEBUG
+Se impostata a \fB1\fR, stampa su stderr il numero di file
+inclusi e la dimensione dell'output.
+.SH NOTE
+.IP \(bu 2
+Le esclusioni sono espressioni \fBfind\fR: \fB\-X\fR agisce sul
+basename, \fB\-P\fR sul percorso completo. Per \fB\-P\fR usare
+sempre apici singoli.
+.IP \(bu 2
+Le directory escluse vengono potate (\fB\-prune\fR): l'esclusione
+è efficiente anche su alberi grandi.
+.IP \(bu 2
+Il file di output viene scritto prima in un file temporaneo e poi
+spostato con \fBmv\fR: in caso di errore un output precedente non
+viene sovrascritto.
+.IP \(bu 2
+Il parser di \fB.gitignore\fR è volutamente semplice: negazioni e
+pattern complessi sono ignorati.
+.IP \(bu 2
+L'ordinamento usa \fBsort \-z\fR se disponibile, altrimenti
+\fBcat\fR.
+.SH "VEDERE ANCHE"
+.BR find (1),
+.BR sort (1),
+.BR gitignore (5)
+.SH LICENZA
+MIT.
+.SH AUTORE
+Il tuo nome <tu@example.com>
