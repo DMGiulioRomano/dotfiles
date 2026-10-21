@@ -60,12 +60,25 @@ USE_DEFAULT=1
 USE_GITIGNORE=0
 DRY_RUN=0
 
+# Helper: verifica che ci sia un argomento dopo $1.
+require_arg() {
+    if [ $# -lt 2 ]; then
+        echo "Errore: opzione '$1' richiede un argomento." >&2
+        usage >&2
+        exit 1
+    fi
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
-        -x|--exclude-dir)   EXTRA_DIRS+=("$2");  shift 2 ;;
-        -X|--exclude-file)  EXTRA_FILES+=("$2"); shift 2 ;;
-        -P|--exclude-path)  EXTRA_PATHS+=("$2"); shift 2 ;;
-        -i|--include)       INCLUDE_PATTERNS+=("$2"); shift 2 ;;
+        -x|--exclude-dir)
+            require_arg "$@"; EXTRA_DIRS+=("$2");  shift 2 ;;
+        -X|--exclude-file)
+            require_arg "$@"; EXTRA_FILES+=("$2"); shift 2 ;;
+        -P|--exclude-path)
+            require_arg "$@"; EXTRA_PATHS+=("$2"); shift 2 ;;
+        -i|--include)
+            require_arg "$@"; INCLUDE_PATTERNS+=("$2"); shift 2 ;;
         -g|--gitignore)     USE_GITIGNORE=1;     shift ;;
         -a|--all)           USE_DEFAULT=0;       shift ;;
         -n|--dry-run)       DRY_RUN=1;           shift ;;
@@ -107,24 +120,33 @@ IGNORE_DIRS+=("${EXTRA_DIRS[@]+"${EXTRA_DIRS[@]}"}")
 IGNORE_FILES+=("${EXTRA_FILES[@]+"${EXTRA_FILES[@]}"}")
 IGNORE_PATHS+=("${EXTRA_PATHS[@]+"${EXTRA_PATHS[@]}"}")
 
-# Parse semplificato di .gitignore (solo pattern semplici)
+# Parse semplificato di .gitignore.
+# - I commenti (#) valgono solo se il primo carattere non-spazio è '#'
+# - Le negazioni (!) sono ignorate
+# - I pattern con '/' (path relativi) sono ignorati: find -name lavora sul basename
 if [ "$USE_GITIGNORE" -eq 1 ] && [ -f "$DIR/.gitignore" ]; then
     while IFS= read -r line; do
-        line="${line%%#*}"                              # rimuovi commenti
-        line="${line%"${line##*[![:space:]]}"}"         # rtrim spazi
+        line="${line%$'\r'}"                          # CR (file con line ending Windows)
+        line="${line#"${line%%[![:space:]]*}"}"       # ltrim
+        case "$line" in
+            '#'*) continue ;;                         # commento (solo se a inizio riga)
+        esac
+        line="${line%"${line##*[![:space:]]}"}"       # rtrim
         [ -z "$line" ] && continue
         case "$line" in
-            '!'*) continue ;;                           # skip negazioni
-            '/'*|*'**'*) continue ;;                    # skip pattern complessi
+            '!'*) continue ;;                         # skip negazioni
+            '/'*|*'**'*) continue ;;                  # skip pattern complessi
             */) IGNORE_DIRS+=("${line%/}") ;;
+            */*) continue ;;                          # skip pattern con path (non supportati)
             *)  IGNORE_FILES+=("$line") ;;
         esac
     done < "$DIR/.gitignore"
 fi
 
 # ---------- Esclusione del file di output ----------
-# Se il file di output si trova dentro DIR, va escluso dalla scansione:
-# altrimenti (prima dell'mv finale) verrebbe incluso nell'output stesso.
+# Se il file di output si trova dentro DIR, va escluso dalla scansione.
+# I metacaratteri glob del nome vengono escapati per non interpretarli
+# come pattern in "find -path".
 if [ -n "$OUT" ]; then
     OUT_DIR=$(dirname -- "$OUT")
     OUT_NAME=$(basename -- "$OUT")
@@ -134,8 +156,9 @@ if [ -n "$OUT" ]; then
             case "$OUT_ABS" in
                 "$DIR_ABS"/*)
                     OUT_REL="${OUT_ABS#"$DIR_ABS"/}"
-                    # find emette esattamente "$DIR/<rel>": usiamo la stessa forma.
-                    IGNORE_PATHS+=("$DIR/$OUT_REL")
+		    DIR_ESCAPED=$(printf '%s' "$DIR" | sed 's/[][*?]/\\&/g')
+		    OUT_REL_ESCAPED=$(printf '%s' "$OUT_REL" | sed 's/[][*?]/\\&/g')
+		    IGNORE_PATHS+=("$DIR_ESCAPED/$OUT_REL_ESCAPED")
                     ;;
             esac
         fi
@@ -212,13 +235,23 @@ fi
 TMP_OUT="$(mktemp)"
 trap 'rm -f "$TMP_OUT"' EXIT
 
+# Se un singolo file non è leggibile, non abortiamo tutto: logghiamo su stderr.
 "${find_cmd[@]}" | "${SORT_CMD[@]}" | while IFS= read -r -d '' file; do
     {
         printf '\n===== %s =====\n\n' "$file"
-        cat "$file"
+        cat "$file" 2>/dev/null || printf '[errore di lettura: %s]\n' "$file" >&2
         printf '\n'
     } >> "$TMP_OUT"
 done
+
+# Conteggio dei file PRIMA di appendere il TREE (così non conta la sezione TREE).
+FILE_COUNT=$(grep -c '^===== ' "$TMP_OUT" 2>/dev/null || true)
+FILE_COUNT=${FILE_COUNT:-0}
+
+if [ "$FILE_COUNT" -eq 0 ]; then
+    echo "Attenzione: nessun file da includere, output non creato." >&2
+    exit 1
+fi
 
 # ---------- Tree in coda (grafico, filtrato, coerente con gli ignore) ----------
 {
@@ -242,18 +275,9 @@ done
 } >> "$TMP_OUT"
 
 # ---------- Riepilogo ----------
-# Nota: `grep -c` esce 1 quando il conteggio è 0, ma stampa comunque "0".
-# Catturiamo l'uscita con `$(...)` e, se il comando fallisce, forziamo 0.
-FILE_COUNT=$(grep -c '^===== ' "$TMP_OUT" 2>/dev/null) || FILE_COUNT=0
-
 if [ "${DEBUG:-0}" = "1" ]; then
     echo "DEBUG: file inclusi: $FILE_COUNT" >&2
     echo "DEBUG: dimensione output: $(wc -c < "$TMP_OUT") byte" >&2
-fi
-
-if [ "$FILE_COUNT" -eq 0 ]; then
-    echo "Attenzione: nessun file da includere, output non creato." >&2
-    exit 1
 fi
 
 mv "$TMP_OUT" "$OUT"

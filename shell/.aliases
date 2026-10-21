@@ -1,0 +1,31 @@
+# ~/.aliases — alias condivisi fra zsh e bash.
+# Sourced da ~/.zshrc e/o ~/.bashrc (vedi repo dotfiles/shell/).
+# Qui solo alias: variabili d'ambiente (EDITOR, PATH…) vanno nei rc
+# specifici della shell, non qui.
+
+# ---------- Navigazione ----------
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias ll='ls -lah'
+alias la='ls -A'
+alias l='ls -CF'
+
+# ---------- Sicurezza (evita sovrascritture per errore) ----------
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# ---------- Git ----------
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline --graph --decorate'
+alias gd='git diff'
+alias gb='git branch'
+
+# ---------- Utility ----------
+alias grep='grep --color=auto'
+alias df='df -h'
+alias du='du -h'

@@ -1,3 +1,6 @@
+# Alias condivisi (repo dotfiles/shell/.aliases → ~/.aliases)
+[ -f "$HOME/.aliases" ] && source "$HOME/.aliases"
+
 # Alias 'cat' solo se 'bat' è disponibile, altrimenti resta il cat di sistema.
 if command -v bat >/dev/null 2>&1; then
     alias cat='bat --paging=never'

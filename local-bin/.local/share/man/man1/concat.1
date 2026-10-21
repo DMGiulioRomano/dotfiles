@@ -1,4 +1,4 @@
-.TH CONCAT 1 "2026-10-21" "concat 1.1" "User Commands"
+.TH CONCAT 1 "2026-10-21" "concat 1.2" "User Commands"
 .SH NOME
 concat \- concatena ricorsivamente i file di una cartella in un unico file
 .SH SINTASSI
@@ -54,9 +54,11 @@ Whitelist: include solo i file il cui nome base corrisponde a
 .TP
 \fB\-g\fR, \fB\-\-gitignore\fR
 Legge i pattern da \fB.gitignore\fR nella radice di \fICARTELLA\fR
-e li aggiunge alle esclusioni. Analisi semplificata: commenti,
-righe vuote, negazioni (\fB!\fR) e pattern complessi (inizio con
-\fB/\fR o contenenti \fB**\fR) sono ignorati.
+e li aggiunge alle esclusioni. Analisi semplificata: sono ignorati
+i commenti (\fB#\fR a inizio riga), le righe vuote, le negazioni
+(\fB!\fR), i pattern che iniziano con \fB/\fR o contengono \fB**\fR,
+e i pattern che contengono \fB/\fR (path relativi: \fBfind \-name\fR
+lavora sul basename).
 .TP
 \fB\-a\fR, \fB\-\-all\fR
 Disabilita gli ignore predefiniti. Le opzioni \fB\-x\fR, \fB\-X\fR,
@@ -171,8 +173,11 @@ viene sovrascritto.
 Se il file di output si trova dentro \fICARTELLA\fR, viene
 escluso automaticamente dalla scansione.
 .IP \(bu 2
-Il parser di \fB.gitignore\fR è volutamente semplice: negazioni e
-pattern complessi sono ignorati.
+Se un file non è leggibile (permessi, race con \fBfind\fR), al suo
+posto viene scritta una riga di errore e la scansione prosegue.
+.IP \(bu 2
+Il parser di \fB.gitignore\fR è volutamente semplice: negazioni,
+commenti complessi e pattern con path sono ignorati.
 .IP \(bu 2
 L'ordinamento usa \fBsort \-z\fR se disponibile, altrimenti
 \fBcat\fR.
