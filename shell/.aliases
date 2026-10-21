@@ -29,3 +29,8 @@ alias gb='git branch'
 alias grep='grep --color=auto'
 alias df='df -h'
 alias du='du -h'
+
+# ----------
+alias concat='concat -X .gitignore'
+alias tree='tree -a -I .git'
+
