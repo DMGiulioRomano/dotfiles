@@ -1,0 +1,119 @@
+### Linux ###
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+*.icloud
+
+### Windows ###
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+### Shell: file di runtime e history (NON sono configurazione) ###
+.zsh_history
+.zsh_sessions/
+.zcompdump
+.zcompdump-*
+.oh-my-zsh/
+.zsh-update
+.bash_history
+.bash_sessions/
+.python_history
+.lesshst
+.viminfo
+.wget-hsts
+.node_repl_history
+.irb_history
+.psql_history
+.mysql_history
+
+### Cache e dati di runtime ###
+.cache/
+.local/share/
+.local/state/
+.Library/
+Library/
+.config/*/Cache/
+.config/*/CachedData/
+.config/*/logs/
+
+### Cartelle utente macOS (mai nel repo) ###
+Applications/
+Desktop/
+Documents/
+Downloads/
+Movies/
+Music/
+Pictures/
+Public/
+VirtualBox VMs/
+.Trash/
+.CFUserTextEncoding
+
+### SSH: MAI versionare chiavi private ###
+.ssh/id_*
+.ssh/*.pem
+.ssh/known_hosts.old
+.ssh/agent/
+.ssh/control/
+
+### Altri segreti comuni ###
+.env
+.env.*
+*.pem
+*.key
+.netrc
+.pgpass
+.my.cnf
+
+### Editor / temporanei ###
+*.swp
+*.swo
+*.tmp
+*~
+\#*\#
+.\#*
+
+### Node / Python (nel caso aggiungerai tool) ###
+node_modules/
+__pycache__/
+.venv/
+venv/
+.tox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+### Output dello script concat ###
+output.txt
