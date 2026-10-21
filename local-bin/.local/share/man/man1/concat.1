@@ -1,4 +1,4 @@
-.TH CONCAT 1 "2026-10-21" "concat 1.0" "User Commands"
+.TH CONCAT 1 "2026-10-21" "concat 1.1" "User Commands"
 .SH NOME
 concat \- concatena ricorsivamente i file di una cartella in un unico file
 .SH SINTASSI
@@ -21,9 +21,14 @@ inserita un'intestazione nella forma:
 Al termine viene appeso un albero (sezione \fBTREE\fR) con la struttura
 delle sole directory e dei soli file effettivamente inclusi.
 .PP
-L'ordine dei file è deterministico (ordinamento per percorso).
+L'ordine dei file segue l'ordinamento per percorso quando \fBsort \-z\fR
+è disponibile; in caso contrario dipende dall'ordine restituito da
+\fBfind\fR.
 Se non viene trovato alcun file, l'output non viene creato e lo
 script esce con stato 1.
+.PP
+Se \fIFILE_OUTPUT\fR si trova dentro \fICARTELLA\fR, viene escluso
+automaticamente dalla scansione per evitare di includerlo in sé stesso.
 .SH OPZIONI
 .TP
 \fB\-x\fR, \fB\-\-exclude\-dir\fR \fINOME\fR
@@ -163,6 +168,9 @@ Il file di output viene scritto prima in un file temporaneo e poi
 spostato con \fBmv\fR: in caso di errore un output precedente non
 viene sovrascritto.
 .IP \(bu 2
+Se il file di output si trova dentro \fICARTELLA\fR, viene
+escluso automaticamente dalla scansione.
+.IP \(bu 2
 Il parser di \fB.gitignore\fR è volutamente semplice: negazioni e
 pattern complessi sono ignorati.
 .IP \(bu 2
@@ -175,4 +183,4 @@ L'ordinamento usa \fBsort \-z\fR se disponibile, altrimenti
 .SH LICENZA
 MIT.
 .SH AUTORE
-Il tuo nome <tu@example.com>
+Giulio Romano De Mattia giuliodemattia21@gmail.com

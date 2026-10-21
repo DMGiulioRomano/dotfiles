@@ -12,6 +12,11 @@
 # Licenza: MIT
 set -euo pipefail
 
+# Le glob non trovate vengono espanse a stringa vuota (anziché lasciate
+# letterali): evita di passare "*" come "pacchetto" a stow se il repo
+# non contiene sottodirectory.
+shopt -s nullglob
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$HOME"
 MODE="stow"          # stow | unstow
@@ -62,31 +67,16 @@ is_excluded() {
     return 1
 }
 
-# Preflight check dei tool richiesti.
-# Blocca l'esecuzione se manca un tool indispensabile; avvisa se manca
-# solo un tool opzionale (aggiornamento database man).
+# Preflight check dei tool richiesti (stow) e avvisi per quelli opzionali
+# (git, bat, mandb/makewhatis). Solo i tool indispensabili bloccano
+# l'esecuzione.
 check_tools() {
     local missing=()
-    for cmd in stow git; do
+    for cmd in stow; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing+=("$cmd")
         fi
     done
-
-    # Tool per aggiornare il database delle man page: opzionale.
-    local man_db_tool=""
-    if command -v mandb >/dev/null 2>&1; then
-        man_db_tool="mandb"
-    elif command -v makewhatis >/dev/null 2>&1; then
-        man_db_tool="makewhatis"
-    elif [ -x /usr/libexec/makewhatis ]; then
-        man_db_tool="/usr/libexec/makewhatis"
-    fi
-    if [ -z "$man_db_tool" ] && [ -d "$HOME/.local/share/man" ]; then
-        echo "Nota: né 'mandb' né 'makewhatis' trovati." >&2
-        echo "      Il database delle man page non verrà aggiornato." >&2
-        echo "      'man concat' funzionerà comunque; 'apropos' potrebbe non trovarlo." >&2
-    fi
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo "ERRORE: tool mancanti: ${missing[*]}" >&2
@@ -100,15 +90,35 @@ check_tools() {
         fi
         exit 1
     fi
-    echo "Preflight check: OK (stow, git presenti)"
+    echo "Preflight check: OK (stow presente)"
+
+    # --- Tool opzionali: avvisa, non bloccare. -------------------
+    if ! command -v git >/dev/null 2>&1; then
+        echo "Nota: 'git' non trovato. Non serve per lo stow," >&2
+        echo "      ma serve per clonare/aggiornare il repo." >&2
+    fi
+    if [ -f "$REPO_ROOT/zsh/.zshrc" ] && ! command -v bat >/dev/null 2>&1; then
+        echo "Nota: 'bat' non trovato. L'alias 'cat' in zsh/.zshrc" >&2
+        echo "      verrà ignorato. Installalo con 'brew install bat'" >&2
+        echo "      (macOS) oppure 'apt install bat' (Debian/Ubuntu)." >&2
+    fi
+    if ! command -v mandb >/dev/null 2>&1 \
+       && ! command -v makewhatis >/dev/null 2>&1 \
+       && [ ! -x /usr/libexec/makewhatis ] \
+       && [ -d "$TARGET/.local/share/man" ]; then
+        echo "Nota: né 'mandb' né 'makewhatis' trovati." >&2
+        echo "      Il database delle man page non verrà aggiornato." >&2
+        echo "      'man concat' funzionerà comunque; 'apropos' potrebbe non trovarlo." >&2
+    fi
 }
 
-# Aggiorna il database delle man page utente, se la directory esiste.
-# - Linux: usa 'mandb' (man-db), che indicizza la directory specificata.
-# - macOS: usa 'makewhatis' (spesso in /usr/libexec).
+# Aggiorna il database delle man page utente sotto TARGET, se la directory
+# esiste.
+# - Linux: 'mandb' (man-db).
+# - macOS: 'makewhatis' (spesso in /usr/libexec).
 # - Se nessuno dei due è disponibile, avvisa ma non blocca.
 update_man_db() {
-    local man_dir="$HOME/.local/share/man"
+    local man_dir="$TARGET/.local/share/man"
     [ -d "$man_dir" ] || return 0
 
     if command -v mandb >/dev/null 2>&1; then
@@ -134,7 +144,13 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -D|--delete)  MODE="unstow"; shift ;;
         -n|--dry-run) DRY_RUN=1;     shift ;;
-        -t|--target)  TARGET="$2";   shift 2 ;;
+        -t|--target)
+            if [[ -z "${2:-}" ]]; then
+                echo "Errore: -t/--target richiede un argomento." >&2
+                usage >&2
+                exit 1
+            fi
+            TARGET="$2"; shift 2 ;;
         -h|--help)    usage; exit 0 ;;
         --)           shift; EXPLICIT_PKGS+=("$@"); break ;;
         -*)           echo "Opzione sconosciuta: $1" >&2; usage >&2; exit 1 ;;
@@ -143,15 +159,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ============================================================
-# PREFLIGHT CHECK
+# VALIDAZIONE TARGET
 # ============================================================
-
-check_tools
 
 if [[ ! -d "$TARGET" ]]; then
     echo "Errore: target '$TARGET' non è una directory." >&2
     exit 1
 fi
+
+# ============================================================
+# PREFLIGHT CHECK
+# ============================================================
+
+check_tools
 
 cd "$REPO_ROOT"
 
@@ -217,7 +237,6 @@ done
 # AGGIORNAMENTO DATABASE MAN
 # ============================================================
 
-# Solo quando i symlink sono stati effettivamente creati.
 if [[ "$DRY_RUN" -eq 0 ]] && [[ "$MODE" == "stow" ]]; then
     update_man_db
 fi

@@ -1,4 +1,7 @@
-alias cat='bat --paging=never'
+# Alias 'cat' solo se 'bat' è disponibile, altrimenti resta il cat di sistema.
+if command -v bat >/dev/null 2>&1; then
+    alias cat='bat --paging=never'
+fi
 
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;

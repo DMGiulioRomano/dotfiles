@@ -84,6 +84,10 @@ fi
 DIR="$1"
 OUT="${2:-output.txt}"
 
+# Normalizza DIR rimuovendo eventuale slash finale (evita path tipo "dir//file").
+DIR="${DIR%/}"
+[ -z "$DIR" ] && DIR="/"
+
 if [ ! -d "$DIR" ]; then
     echo "Errore: '$DIR' non è una cartella" >&2
     exit 1
@@ -118,8 +122,27 @@ if [ "$USE_GITIGNORE" -eq 1 ] && [ -f "$DIR/.gitignore" ]; then
     done < "$DIR/.gitignore"
 fi
 
+# ---------- Esclusione del file di output ----------
+# Se il file di output si trova dentro DIR, va escluso dalla scansione:
+# altrimenti (prima dell'mv finale) verrebbe incluso nell'output stesso.
+if [ -n "$OUT" ]; then
+    OUT_DIR=$(dirname -- "$OUT")
+    OUT_NAME=$(basename -- "$OUT")
+    if OUT_ABS=$(cd "$OUT_DIR" 2>/dev/null && pwd); then
+        OUT_ABS="$OUT_ABS/$OUT_NAME"
+        if DIR_ABS=$(cd "$DIR" 2>/dev/null && pwd); then
+            case "$OUT_ABS" in
+                "$DIR_ABS"/*)
+                    OUT_REL="${OUT_ABS#"$DIR_ABS"/}"
+                    # find emette esattamente "$DIR/<rel>": usiamo la stessa forma.
+                    IGNORE_PATHS+=("$DIR/$OUT_REL")
+                    ;;
+            esac
+        fi
+    fi
+fi
+
 # ---------- Costruzione espressione find ----------
-# prune per directory
 prune_expr=()
 first=1
 for d in "${IGNORE_DIRS[@]}"; do
@@ -128,7 +151,6 @@ for d in "${IGNORE_DIRS[@]}"; do
     else                      prune_expr+=(-o -name "$d"); fi
 done
 
-# -name per file
 file_expr=()
 first=1
 for f in "${IGNORE_FILES[@]}"; do
@@ -137,7 +159,6 @@ for f in "${IGNORE_FILES[@]}"; do
     else                      file_expr+=(-o -name "$f"); fi
 done
 
-# -path per percorsi
 path_expr=()
 first=1
 for p in "${IGNORE_PATHS[@]}"; do
@@ -146,7 +167,6 @@ for p in "${IGNORE_PATHS[@]}"; do
     else                      path_expr+=(-o -path "$p"); fi
 done
 
-# -name per include (whitelist)
 include_expr=()
 first=1
 for i in "${INCLUDE_PATTERNS[@]}"; do
@@ -157,31 +177,26 @@ done
 
 find_cmd=(find "$DIR")
 
-# prune delle directory da ignorare
 if [ ${#prune_expr[@]} -gt 0 ]; then
     find_cmd+=( \( -type d \( "${prune_expr[@]}" \) -prune \) -o )
 fi
 
 find_cmd+=( \( -type f )
 
-# whitelist (se richiesta)
 if [ ${#include_expr[@]} -gt 0 ]; then
     find_cmd+=( \( "${include_expr[@]}" \) )
 fi
 
-# esclusioni per nome file
 if [ ${#file_expr[@]} -gt 0 ]; then
     find_cmd+=( ! \( "${file_expr[@]}" \) )
 fi
 
-# esclusioni per percorso
 if [ ${#path_expr[@]} -gt 0 ]; then
     find_cmd+=( ! \( "${path_expr[@]}" \) )
 fi
 
 find_cmd+=( -print0 \) )
 
-# sort -z: usa GNU/BSD sort se supporta NUL, altrimenti cat
 if echo | sort -z >/dev/null 2>&1; then SORT_CMD=(sort -z); else SORT_CMD=(cat); fi
 
 # ---------- Dry-run ----------
@@ -200,7 +215,7 @@ trap 'rm -f "$TMP_OUT"' EXIT
 "${find_cmd[@]}" | "${SORT_CMD[@]}" | while IFS= read -r -d '' file; do
     {
         printf '\n===== %s =====\n\n' "$file"
-        cat -- "$file"
+        cat "$file"
         printf '\n'
     } >> "$TMP_OUT"
 done
@@ -226,8 +241,11 @@ done
     printf '\n'
 } >> "$TMP_OUT"
 
-# DEBUG: riepilogo
-FILE_COUNT=$(grep -c '^===== ' "$TMP_OUT" 2>/dev/null || echo 0)
+# ---------- Riepilogo ----------
+# Nota: `grep -c` esce 1 quando il conteggio è 0, ma stampa comunque "0".
+# Catturiamo l'uscita con `$(...)` e, se il comando fallisce, forziamo 0.
+FILE_COUNT=$(grep -c '^===== ' "$TMP_OUT" 2>/dev/null) || FILE_COUNT=0
+
 if [ "${DEBUG:-0}" = "1" ]; then
     echo "DEBUG: file inclusi: $FILE_COUNT" >&2
     echo "DEBUG: dimensione output: $(wc -c < "$TMP_OUT") byte" >&2
