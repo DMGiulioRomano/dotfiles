@@ -31,6 +31,46 @@ alias df='df -h'
 alias du='du -h'
 
 # ----------
-alias concat='concat -X .gitignore'
 alias tree='tree -a -I .git'
 
+# Alias 'cat' solo se 'bat' è disponibile, altrimenti resta il cat di sistema.
+if command -v bat >/dev/null 2>&1; then
+    alias cat='bat --paging=never'
+fi
+
+
+# --- concat + copia in clipboard -------------------------------------
+_copy_to_clipboard() {
+    if command -v pbcopy >/dev/null 2>&1; then
+        pbcopy                                   # macOS
+    elif command -v wl-copy >/dev/null 2>&1; then
+        wl-copy                                  # Linux Wayland
+    elif command -v xclip >/dev/null 2>&1; then
+        xclip -selection clipboard               # Linux X11
+    elif command -v xsel >/dev/null 2>&1; then
+        xsel --clipboard --input                 # Linux X11 (alternativa)
+    else
+        echo "concat: nessun tool clipboard trovato (pbcopy/wl-copy/xclip/xsel)" >&2
+        return 1
+    fi
+}
+
+concat() {
+    local dryrun=0 a
+    for a in "$@"; do
+        case "$a" in
+            -n|--dry-run) dryrun=1; break ;;
+        esac
+    done
+
+    command concat -X .gitignore "$@" || return $?
+    [ "$dryrun" -eq 1 ] && return 0
+
+    local out="output.txt"
+    if [ $# -ge 2 ]; then
+        out="${!#}"                 # ultimo argomento
+        [ -d "$out" ] && out="output.txt"
+    fi
+
+    _copy_to_clipboard < "$out" && echo "Copiato $out nella clipboard."
+}

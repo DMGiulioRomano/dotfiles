@@ -135,7 +135,11 @@ pkg_name_for() {
         stow) echo stow ;;
         git)  echo git ;;
         bat)  echo bat ;;
-        mandb|makewhatis)
+        wl-copy|wl-clipboard)
+            echo wl-clipboard ;;
+        xclip) echo xclip ;;
+        xsel)  echo xsel ;;
+	mandb|makewhatis)
             case "$pm" in
                 apk) echo mandoc ;;
                 *)   echo man-db ;;
@@ -257,6 +261,35 @@ check_tools() {
        && ! command -v bat >/dev/null 2>&1; then
         missing_opt+=(bat)
     fi
+
+    if [[ "$(uname -s)" != "Darwin" ]] && [[ "$MODE" = "stow" ]]; then
+        local has_clip=0
+        command -v wl-copy >/dev/null 2>&1 && has_clip=1
+        command -v xclip   >/dev/null 2>&1 && has_clip=1
+        command -v xsel    >/dev/null 2>&1 && has_clip=1
+
+        local will_use_shell=0
+        if [[ ${#EXPLICIT_PKGS[@]} -eq 0 ]]; then
+            will_use_shell=1
+        else
+            local p
+            for p in "${EXPLICIT_PKGS[@]}"; do
+                [[ "$p" == "shell" ]] && will_use_shell=1
+            done
+        fi
+
+        if [ "$has_clip" -eq 0 ] && [ "$will_use_shell" -eq 1 ] \
+           && [ -f "$REPO_ROOT/shell/.aliases" ]; then
+            if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+                missing_opt+=(wl-copy)
+            elif [[ -n "${DISPLAY:-}" ]]; then
+                missing_opt+=(xclip)
+            fi
+            # Se nessuna delle due variabili è impostata (es. server
+            # headless), non suggeriamo nulla: non c'è clipboard.
+        fi
+    fi
+
 
     local has_man_tool=0
     if command -v mandb >/dev/null 2>&1; then has_man_tool=1; fi

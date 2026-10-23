@@ -59,4 +59,16 @@ config.keys = {
 
 config.color_scheme = 'shades-of-purple'
 
+-- Forza WezTerm a usare il titolo del pannello attivo,
+-- aggirando il problema di Neovim con TERM=wezterm
+wezterm.on('format-tab-title', function(tab)
+  -- Usa il titolo del pannello attivo se disponibile
+  local pane_title = tab.active_pane.title
+  if pane_title and #pane_title > 0 then
+    return pane_title
+  end
+  -- Altrimenti, usa il titolo predefinito della tab
+  return tab.tab_title
+end)
+
 return config
