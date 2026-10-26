@@ -32,6 +32,7 @@ alias du='du -h'
 
 # ----------
 alias tree='tree -a -I .git'
+alias pandoc='pandoc --pdf-engine=typst'
 
 # Alias 'cat' solo se 'bat' è disponibile, altrimenti resta il cat di sistema.
 if command -v bat >/dev/null 2>&1; then
@@ -67,8 +68,9 @@ concat() {
     [ "$dryrun" -eq 1 ] && return 0
 
     local out="output.txt"
+    
     if [ $# -ge 2 ]; then
-        out="${!#}"                 # ultimo argomento
+        for out in "$@"; do :; done
         [ -d "$out" ] && out="output.txt"
     fi
 

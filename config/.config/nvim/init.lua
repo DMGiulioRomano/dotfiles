@@ -10,3 +10,7 @@ local vimrc = vim.fn.expand('~/.vimrc')
 if vim.fn.filereadable(vimrc) == 1 then
     vim.cmd('source ' .. vimrc)
 end
+
+vim.api.nvim_set_hl(0, "Normal", { bg = "none" })
+vim.api.nvim_set_hl(0, "NormalNC", { bg = "none" })
+vim.api.nvim_set_hl(0, "EndOfBuffer", { bg = "none" })
