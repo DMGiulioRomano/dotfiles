@@ -31,6 +31,12 @@ config.keys = {
     mods = 'SUPER',
     action = wezterm.action.ResetFontSize,
   },
+  -- Option + 9 → backtick (`), assente nel layout Italian - Pro
+  {
+    key = '9',
+    mods = 'OPT',
+    action = wezterm.action.SendString '`',
+  },
   -- Option + Freccia Sinistra → Alt+b (indietro di una parola)
   {
     key = 'LeftArrow',
