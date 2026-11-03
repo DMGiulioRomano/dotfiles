@@ -2,14 +2,21 @@
 
 # PATH dei gestori di pacchetti. Sta prima del controllo qui sotto perché serve
 # anche a 'bash -lc comando', e prima di .aliases, che cerca bat nel PATH.
-for _dir in /opt/local/sbin /opt/local/bin; do
-    [ -d "$_dir" ] || continue
-    case ":$PATH:" in
-        *":$_dir:"*) ;;
-        *) export PATH="$_dir:$PATH";;
-    esac
-done
-unset _dir
+#
+# Una cartella già nel PATH va comunque spostata davanti: in una shell di login
+# /etc/profile lancia path_helper, che mette quelle di sistema prima di quelle
+# ereditate (per esempio aprendo bash da zsh).
+_path_front() {
+    [ -d "$1" ] || return 0
+    local rest=":$PATH:"
+    rest="${rest//:$1:/:}"
+    rest="${rest#:}"
+    rest="${rest%:}"
+    export PATH="$1${rest:+:$rest}"
+}
+
+_path_front /opt/local/sbin
+_path_front /opt/local/bin
 
 # Homebrew, se presente: /opt/homebrew su Apple Silicon, /usr/local su Intel.
 if [ -z "${HOMEBREW_PREFIX:-}" ]; then
@@ -21,32 +28,29 @@ if [ -z "${HOMEBREW_PREFIX:-}" ]; then
     done
     unset _brew
 fi
+if [ -n "${HOMEBREW_PREFIX:-}" ]; then
+    _path_front "$HOMEBREW_PREFIX/sbin"
+    _path_front "$HOMEBREW_PREFIX/bin"
+fi
 
 # Se non interattivo, esci subito (evita effetti su script/cron).
 case $- in
     *i*) ;;
-    *) return 0 ;;
+    *) unset -f _path_front; return 0 ;;
 esac
 
 # Alias condivisi (repo dotfiles/shell/.aliases → ~/.aliases)
 [ -f "$HOME/.aliases" ] && . "$HOME/.aliases"
 
-# PATH: ~/.local/bin se non già presente.
-case ":$PATH:" in
-    *":$HOME/.local/bin:"*) ;;
-    *) export PATH="$HOME/.local/bin${PATH:+:$PATH}";;
-esac
+_path_front "$HOME/.local/bin"
 
 # Precedenza ai binari GNU di MacPorts e di Homebrew (ls, find, grep, sed, make…).
 for _dir in /opt/local/libexec/gnubin \
     {/opt/homebrew,/usr/local}/opt/{coreutils,findutils,grep,gnu-sed,make}/libexec/gnubin; do
-    [ -d "$_dir" ] || continue
-    case ":$PATH:" in
-        *":$_dir:"*) ;;
-        *) export PATH="$_dir:$PATH";;
-    esac
+    _path_front "$_dir"
 done
 unset _dir
+unset -f _path_front
 
 # MANPATH per le man page utente.
 if [ -d "$HOME/.local/share/man" ]; then
