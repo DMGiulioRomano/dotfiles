@@ -35,7 +35,6 @@ set wildmode=longest:full,full
 set laststatus=2        " statusline sempre visibile
 set scrolloff=8         " tieni 8 righe di contesto sopra/sotto il cursore
 set sidescrolloff=8     " idem in orizzontale
-set colorcolumn=80      " riga guida a colonna 80 (stile di codice)
 set termguicolors       " colori 24-bit (se il terminale li supporta)
 
 " ==== Comportamento ====
