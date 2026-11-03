@@ -14,6 +14,17 @@ case ":$PATH:" in
     *) export PATH="$HOME/.local/bin${PATH:+:$PATH}";;
 esac
 
+# Precedenza ai binari GNU di MacPorts e di Homebrew (ls, find, grep, sed, make…).
+for _dir in /opt/local/libexec/gnubin \
+    {/opt/homebrew,/usr/local}/opt/{coreutils,findutils,grep,gnu-sed,make}/libexec/gnubin; do
+    [ -d "$_dir" ] || continue
+    case ":$PATH:" in
+        *":$_dir:"*) ;;
+        *) export PATH="$_dir:$PATH";;
+    esac
+done
+unset _dir
+
 # MANPATH per le man page utente.
 if [ -d "$HOME/.local/share/man" ]; then
     case ":$MANPATH:" in
