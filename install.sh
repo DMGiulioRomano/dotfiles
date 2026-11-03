@@ -627,19 +627,19 @@ check_tools() {
 
     if ! command -v git >/dev/null 2>&1; then missing_opt+=(git); fi
 
-    # 'bat' serve solo se stiamo per stoware zsh/ (dove .zshrc fa alias cat='bat ...').
-    # Calcoliamo se zsh sarà effettivamente selezionato, senza fidarci di $SHELL_MODE
+    # 'bat' serve solo se stiamo per stoware una shell (.aliases fa alias cat='bat ...').
+    # Calcoliamo se sarà effettivamente selezionata, senza fidarci di $SHELL_MODE
     # (in 'auto' va risolta la shell concreta).
-    local will_use_zsh=0
+    local will_use_aliases=0
     case "$SHELL_MODE" in
-        zsh|both) will_use_zsh=1 ;;
-        bash|none) will_use_zsh=0 ;;
+        zsh|bash|both) will_use_aliases=1 ;;
+        none) will_use_aliases=0 ;;
         auto)
-            [ "$(detect_shell_family)" = "zsh" ] && will_use_zsh=1
+            [ -n "$(detect_shell_family)" ] && will_use_aliases=1
             ;;
     esac
-    if [ "$will_use_zsh" -eq 1 ] \
-       && [ -f "$REPO_ROOT/zsh/.zshrc" ] \
+    if [ "$will_use_aliases" -eq 1 ] \
+       && [ -f "$REPO_ROOT/shell/.aliases" ] \
        && ! command -v bat >/dev/null 2>&1; then
         missing_opt+=(bat)
     fi

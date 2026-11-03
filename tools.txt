@@ -19,6 +19,7 @@ pkg | gfind          | findutils      | findutils
 pkg | ggrep          | grep           | grep
 pkg | gsed           | gnu-sed        | gsed
 pkg | bash           | bash           | bash
+pkg | bash-completion | bash-completion@2 | bash-completion
 pkg | bat            | bat            | bat
 pkg | highlight      | highlight      | highlight
 pkg | stow           | stow           | stow

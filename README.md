@@ -6,7 +6,7 @@ Dotfiles personali, gestiti con [GNU Stow](https://www.gnu.org/software/stow/).
 
 - **`stow`** — obbligatorio (usato da `install.sh`)
 - **`git`** — consigliato (per clonare/aggiornare il repo)
-- **`bat`** — opzionale (per l'alias `cat` in `zsh/.zshrc`)
+- **`bat`** — opzionale (per l'alias `cat` in `shell/.aliases`)
 - **`mandb`** o **`makewhatis`** — opzionale (per indicizzare le man page utente)
 - **`wl-clipboard`** (Wayland) oppure **`xclip`/`xsel`** (X11) — opzionale
   (per la copia in clipboard della funzione `concat`, solo su Linux)
@@ -79,7 +79,7 @@ nuovo, ti dice che va aggiunto alla lista.
 |-------------|---------------|
 | `shell`     | `~/.aliases` — alias condivisi fra zsh e bash |
 | `zsh`       | `~/.zshrc`, `~/.zprofile` (sourcano `~/.aliases`) |
-| `bash`      | `~/.bashrc`, `~/.bash_profile` (opzionale, sourcano `~/.aliases`) |
+| `bash`      | `~/.bashrc`, `~/.bash_profile` (sourcano `~/.aliases`) |
 | `local-bin` | `~/.local/bin/concat` + man page |
 | `config`    | `~/.config/nvim/init.lua`, `~/.config/wezterm/wezterm.lua`, `~/.vimrc` |
 
@@ -99,6 +99,25 @@ Override:
 Con `--shell=auto` (default), se `$SHELL` non è né zsh né bash viene
 stampato un avviso e i pacchetti shell vengono saltati; `shell/`
 (alias condivisi) viene comunque stowato.
+
+## Usare bash come shell predefinita su macOS
+
+`bash/` offre le stesse funzioni di `zsh/`: PATH di MacPorts e Homebrew, binari GNU,
+completamento con Tab, prompt, man page utente e configurazione di WezTerm.
+
+La bash di sistema è ferma alla 3.2 e non regge `bash-completion`, quindi serve
+quella del gestore di pacchetti (qui il percorso per MacPorts, con Homebrew è
+`$(brew --prefix)/bin/bash`):
+
+```sh
+./install.sh --tools --shell=both
+/opt/local/bin/bash -l       # prova in una shell a parte, poi esci con 'exit'
+echo /opt/local/bin/bash | sudo tee -a /etc/shells
+chsh -s /opt/local/bin/bash
+```
+
+Vale dai terminali aperti dopo il cambio. Se bash si rompe, `chsh -s /bin/zsh`
+riporta tutto com'era.
 
 ## Licenza
 
