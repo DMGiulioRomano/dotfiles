@@ -69,6 +69,11 @@ fi
 # Prompt uguale a quello predefinito di zsh: utente@host cartella $
 PS1='\u@\h \W \$ '
 
+# ** cerca a qualsiasi profondità, come in zsh (da bash 4).
+if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
+    shopt -s globstar
+fi
+
 # Completamento con Tab, l'equivalente di compinit in .zshrc.
 # Il pacchetto bash-completion (in tools.txt) richiede bash 4 o superiore.
 if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
