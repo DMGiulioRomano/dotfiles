@@ -32,6 +32,15 @@ if [ -d "/opt/local/libexec/gnubin" ]; then
     # Carica ls, cp, mv, date, find, xargs ecc. in versione Linux
     export PATH="/opt/local/libexec/gnubin:$PATH"
 fi
+# Stessa cosa per Homebrew, dove ogni pacchetto GNU ha la sua cartella gnubin.
+for _prefix in /opt/homebrew /usr/local; do
+    for _pkg in coreutils findutils grep gnu-sed make; do
+        if [ -d "$_prefix/opt/$_pkg/libexec/gnubin" ]; then
+            export PATH="$_prefix/opt/$_pkg/libexec/gnubin:$PATH"
+        fi
+    done
+done
+unset _prefix _pkg
 # Forza Vim a usare un TERM compatibile per aggiornare il titolo
 vim() {
     TERM=xterm-256color command vim "$@"

@@ -26,7 +26,12 @@ DRY_RUN=0
 AUTO_INSTALL=0       # -y
 NO_INSTALL=0         # --no-install
 SHELL_MODE="auto"    # auto | zsh | bash | both | none
+PM_CHOICE="auto"     # auto | brew | port (solo macOS)
+MAC_PM=""            # gestore scelto su macOS, valorizzato da ensure_macos_pm
 EXPLICIT_PKGS=()
+
+HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+MACPORTS_INSTALL_URL="https://www.macports.org/install.php"
 
 EXCLUDE_DIRS=(
     .git
@@ -51,6 +56,11 @@ Opzioni:
   -t, --target DIR        Directory di destinazione (default: \$HOME)
   -y, --yes               Installa automaticamente i tool mancanti
       --no-install        Non offrire l'installazione automatica
+      --pm=MODE           Gestore di pacchetti su macOS:
+                            auto  (default) — brew se c'è, poi MacPorts se c'è,
+                                              altrimenti prova a installare brew
+                            brew  — solo Homebrew (lo installa se manca)
+                            port  — solo MacPorts
       --shell=MODE        Quali pacchetti shell stoware:
                             auto  (default) — rileva da \$SHELL
                             zsh   — solo zsh/
@@ -88,12 +98,103 @@ is_excluded() {
 # RILEVAMENTO OS / DISTRO / PACKAGE MANAGER
 # ============================================================
 
-detect_pkg_manager() {
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        command -v brew >/dev/null 2>&1 && { echo brew; return 0; }
+is_macos() {
+    [[ "$(uname -s)" == "Darwin" ]]
+}
+
+# Su un Mac appena configurato il PATH di questi gestori arriva da ~/.zprofile,
+# che è proprio uno dei file che questo script deve ancora installare.
+refresh_macos_path() {
+    local d
+    for d in /opt/local/sbin /opt/local/bin /usr/local/bin /opt/homebrew/bin; do
+        [ -d "$d" ] || continue
+        case ":$PATH:" in
+            *":$d:"*) ;;
+            *) PATH="$d:$PATH" ;;
+        esac
+    done
+    export PATH
+}
+
+# Chiede conferma; restituisce 0 solo se si può procedere con l'azione.
+confirm_action() {
+    [ "$DRY_RUN" -eq 1 ] && return 1
+    if [ "$NO_INSTALL" -eq 1 ]; then
+        echo "(--no-install) Nessuna installazione eseguita." >&2
         return 1
     fi
+    [ "$AUTO_INSTALL" -eq 1 ] && return 0
+    if [ ! -t 0 ]; then
+        echo "stdin non è un terminale: nessuna installazione automatica." >&2
+        echo "Rilancia con -y per procedere." >&2
+        return 1
+    fi
+    local answer=""
+    read -r -p "$1 [y/N] " answer || true
+    case "$answer" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+    esac
+    return 1
+}
 
+install_homebrew() {
+    echo
+    echo "Homebrew non trovato."
+    echo "Comando: /bin/bash -c \"\$(curl -fsSL $HOMEBREW_INSTALL_URL)\""
+    echo
+    confirm_action "Provo a installare Homebrew ora?" || return 1
+
+    local script
+    if ! script=$(curl -fsSL "$HOMEBREW_INSTALL_URL"); then
+        echo "Download dell'installer di Homebrew fallito." >&2
+        return 1
+    fi
+    if [ "$AUTO_INSTALL" -eq 1 ]; then
+        NONINTERACTIVE=1 /bin/bash -c "$script" || return 1
+    else
+        /bin/bash -c "$script" || return 1
+    fi
+    refresh_macos_path
+    command -v brew >/dev/null 2>&1
+}
+
+# Sceglie il gestore senza installare nulla: se c'è già, si usa quello.
+detect_macos_pm() {
+    MAC_PM=""
+    refresh_macos_path
+    case "$PM_CHOICE" in
+        brew) command -v brew >/dev/null 2>&1 && MAC_PM=brew ;;
+        port) command -v port >/dev/null 2>&1 && MAC_PM=port ;;
+        auto)
+            if command -v brew >/dev/null 2>&1; then
+                MAC_PM=brew
+            elif command -v port >/dev/null 2>&1; then
+                MAC_PM=port
+            fi
+            ;;
+    esac
+    [ -n "$MAC_PM" ]
+}
+
+# Come detect_macos_pm, ma se non c'è alcun gestore prova a installare Homebrew.
+# MacPorts non si installa da qui: il pacchetto dipende dalla versione di macOS.
+ensure_macos_pm() {
+    detect_macos_pm && return 0
+
+    if [ "$PM_CHOICE" != "port" ] && install_homebrew; then
+        MAC_PM=brew
+        return 0
+    fi
+    [ "$PM_CHOICE" = "brew" ] && return 1
+
+    echo "Homebrew non disponibile: si ripiega su MacPorts, che va installato a mano." >&2
+    echo "  1. xcode-select --install" >&2
+    echo "  2. Scarica il pacchetto per la tua versione di macOS: $MACPORTS_INSTALL_URL" >&2
+    echo "  3. Rilancia questo script." >&2
+    return 1
+}
+
+detect_pkg_manager() {
     if [[ -r /etc/os-release ]]; then
         # shellcheck disable=SC1091
         . /etc/os-release
@@ -160,6 +261,7 @@ build_install_cmd() {
 
     case "$pm" in
         brew)   echo "brew install ${pkgs[*]}" ;;
+        port)   echo "${SUDO}$(command -v port) -N install ${pkgs[*]}" ;;
         apt)    echo "${SUDO}apt-get update && ${SUDO}apt-get install -y ${pkgs[*]}" ;;
         dnf)    echo "${SUDO}dnf install -y ${pkgs[*]}" ;;
         pacman) echo "${SUDO}pacman -S --noconfirm --needed ${pkgs[*]}" ;;
@@ -177,11 +279,11 @@ prompt_and_install() {
     [ ${#tools[@]} -eq 0 ] && return 0
 
     local pm
-    if ! pm=$(detect_pkg_manager); then
+    if is_macos; then
+        ensure_macos_pm || return 1
+        pm="$MAC_PM"
+    elif ! pm=$(detect_pkg_manager); then
         echo "Nessun gestore di pacchetti riconosciuto per installare: ${tools[*]}" >&2
-        if [[ "$(uname -s)" == "Darwin" ]]; then
-            echo "Installa Homebrew prima: https://brew.sh" >&2
-        fi
         return 1
     fi
 
@@ -202,27 +304,10 @@ prompt_and_install() {
     echo "Comando: $cmd"
     echo
 
-    if [ "$NO_INSTALL" -eq 1 ]; then
-        echo "(--no-install) Esegui manualmente il comando sopra." >&2
+    if ! confirm_action "Vuoi eseguirlo ora?"; then
+        echo "Salto. Esegui manualmente:" >&2
+        echo "  $cmd" >&2
         return 1
-    fi
-
-    if [ "$AUTO_INSTALL" -eq 0 ]; then
-        if [ ! -t 0 ]; then
-            echo "stdin non è un terminale: nessuna installazione automatica." >&2
-            echo "Rilancia con -y oppure esegui il comando sopra manualmente." >&2
-            return 1
-        fi
-        local answer=""
-        read -r -p "Vuoi eseguirlo ora? [y/N] " answer || true
-        case "$answer" in
-            [yY]|[yY][eE][sS]) ;;
-            *)
-                echo "Salto. Esegui manualmente:" >&2
-                echo "  $cmd" >&2
-                return 1
-                ;;
-        esac
     fi
 
     echo ">>> $cmd"
@@ -419,6 +504,7 @@ while [[ $# -gt 0 ]]; do
         -n|--dry-run) DRY_RUN=1;     shift ;;
         -y|--yes)     AUTO_INSTALL=1; shift ;;
         --no-install) NO_INSTALL=1;   shift ;;
+        --pm=*)       PM_CHOICE="${1#--pm=}"; shift ;;
         --shell=*)    SHELL_MODE="${1#--shell=}"; shift ;;
         --shell)
             if [[ -z "${2:-}" ]]; then
@@ -444,6 +530,15 @@ if [ "$AUTO_INSTALL" -eq 1 ] && [ "$NO_INSTALL" -eq 1 ]; then
     echo "Errore: -y e --no-install sono incompatibili." >&2
     exit 1
 fi
+
+case "$PM_CHOICE" in
+    auto|brew|port) ;;
+    *)
+        echo "Valore --pm non valido: $PM_CHOICE" >&2
+        echo "Valori ammessi: auto, brew, port" >&2
+        exit 1
+        ;;
+esac
 
 # Valida --shell fail-fast (prima di toccare il filesystem).
 case "$SHELL_MODE" in
