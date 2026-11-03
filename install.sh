@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# install.sh — attiva (o disattiva) tutti i pacchetti Stow del repo.
+# install.sh — attiva (o disattiva) i pacchetti Stow del repo e, su macOS,
+# installa i programmi elencati in tools.txt.
 #
 # Uso:
 #   ./install.sh                     # stow di tutti (con filtro shell auto)
@@ -11,7 +12,10 @@
 #   ./install.sh -t DIR              # target diverso da $HOME
 #   ./install.sh -y                  # installa i tool mancanti senza chiedere
 #   ./install.sh --no-install        # non offrire installazione automatica
-#   ./install.sh nvim zsh            # stow solo dei pacchetti indicati
+#   ./install.sh config zsh          # stow solo dei pacchetti indicati
+#   ./install.sh --tools             # stow + programmi di tools.txt (macOS)
+#   ./install.sh --tools-only        # solo programmi di tools.txt (macOS)
+#   ./install.sh --audit             # cosa manca e cosa non è dichiarato (macOS)
 #   ./install.sh -h                  # aiuto
 #
 # Licenza: MIT
@@ -28,10 +32,14 @@ NO_INSTALL=0         # --no-install
 SHELL_MODE="auto"    # auto | zsh | bash | both | none
 PM_CHOICE="auto"     # auto | brew | port (solo macOS)
 MAC_PM=""            # gestore scelto su macOS, valorizzato da ensure_macos_pm
+TOOLS_MODE=""        # "" | with | only | audit
+TOOLS_FAILED=0
 EXPLICIT_PKGS=()
 
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 MACPORTS_INSTALL_URL="https://www.macports.org/install.php"
+MANIFEST="$REPO_ROOT/tools.txt"
+NL=$'\n'
 
 EXCLUDE_DIRS=(
     .git
@@ -56,6 +64,10 @@ Opzioni:
   -t, --target DIR        Directory di destinazione (default: \$HOME)
   -y, --yes               Installa automaticamente i tool mancanti
       --no-install        Non offrire l'installazione automatica
+      --tools             Oltre allo stow, installa i programmi di tools.txt (macOS)
+      --tools-only        Installa solo i programmi di tools.txt, niente stow (macOS)
+      --audit             Sola lettura: cosa manca e cosa è installato ma non
+                          dichiarato in tools.txt (macOS)
       --pm=MODE           Gestore di pacchetti su macOS:
                             auto  (default) — brew se c'è, poi MacPorts se c'è,
                                               altrimenti prova a installare brew
@@ -79,10 +91,12 @@ Esempi:
   ./install.sh                    # stow di tutti (shell rilevata)
   ./install.sh --shell=both       # zsh + bash insieme
   ./install.sh -D                 # unstow di tutti
-  ./install.sh nvim zsh           # stow solo di nvim e zsh
+  ./install.sh config zsh         # stow solo di config e zsh
   ./install.sh -n                 # dry-run su tutti
   ./install.sh -y                 # stow + installa tool mancanti senza chiedere
   ./install.sh --no-install       # mostra i comandi di installazione ed esce
+  ./install.sh --tools            # stow + programmi di tools.txt
+  ./install.sh --tools -n         # mostra cosa installerebbe, senza farlo
 EOF
 }
 
@@ -319,6 +333,289 @@ prompt_and_install() {
 }
 
 # ============================================================
+# PROGRAMMI DA tools.txt (SOLO macOS)
+# ============================================================
+
+trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
+}
+
+list_has() {
+    case "$NL$1$NL" in
+        *"$NL$2$NL"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Stampa le righe utili del manifest, senza commenti né righe vuote.
+manifest_rows() {
+    grep -Ev '^[[:space:]]*(#|$)' "$MANIFEST" || true
+}
+
+# Pacchetti installati e pacchetti richiesti esplicitamente, uno per riga.
+# In MacPorts una dipendenza rimasta orfana può essere rimossa da 'port reclaim',
+# per questo i due elenchi sono distinti.
+load_pm_state() {
+    PM_INSTALLED=""
+    PM_REQUESTED=""
+    case "$MAC_PM" in
+        brew)
+            PM_INSTALLED="$(brew list --formula -1 2>/dev/null || true)"
+            PM_REQUESTED="$(brew leaves 2>/dev/null || true)"
+            ;;
+        port)
+            PM_INSTALLED="$(port -q installed active 2>/dev/null | awk '{print $1}' || true)"
+            PM_REQUESTED="$(port -q installed requested 2>/dev/null | awk '{print $1}' || true)"
+            ;;
+    esac
+}
+
+# Sceglie dalla riga del manifest la colonna del gestore in uso.
+pkg_for_pm() {
+    case "$MAC_PM" in
+        brew) trim "$1" ;;
+        port) trim "$2" ;;
+    esac
+}
+
+run_tools() {
+    local kind a b c cmd pkg
+    local to_install="" to_request="" to_script=""
+    local has_pm=0
+
+    if ensure_macos_pm; then
+        has_pm=1
+        load_pm_state
+        echo "Gestore di pacchetti: $MAC_PM"
+    fi
+
+    while IFS='|' read -r kind a b c; do
+        kind="$(trim "$kind")"
+        cmd="$(trim "$a")"
+        case "$kind" in
+            pkg)
+                [ "$has_pm" -eq 1 ] || continue
+                pkg="$(pkg_for_pm "$b" "$c")"
+                if ! list_has "$PM_INSTALLED" "$pkg"; then
+                    to_install+="$pkg$NL"
+                elif [ "$MAC_PM" = port ] && ! list_has "$PM_REQUESTED" "$pkg"; then
+                    to_request+="$pkg$NL"
+                fi
+                ;;
+            script)
+                if ! command -v "$cmd" >/dev/null 2>&1; then
+                    to_script+="$cmd $(trim "$b")$NL"
+                fi
+                ;;
+        esac
+    done < <(manifest_rows)
+
+    if [ "$has_pm" -eq 0 ]; then
+        TOOLS_FAILED=1
+    fi
+    if [ -z "$to_install$to_request$to_script" ]; then
+        if [ "$has_pm" -eq 1 ]; then
+            echo "Programmi: tutti già installati."
+        fi
+        return 0
+    fi
+
+    if [ -n "$to_install" ]; then
+        # shellcheck disable=SC2086  # l'elenco va spezzato per riga
+        echo "Da installare con $MAC_PM:" $to_install
+    fi
+    if [ -n "$to_request" ]; then
+        # shellcheck disable=SC2086  # l'elenco va spezzato per riga
+        echo "Già presenti, da marcare come richiesti (port setrequested):" $to_request
+    fi
+    if [ -n "$to_script" ]; then
+        echo "Da installare con lo script ufficiale:"
+        printf '%s' "$to_script" | sed 's/^/  /'
+    fi
+    if [ "$MAC_PM" = port ] && [ -n "$to_install$to_request" ]; then
+        echo "MacPorts chiederà la password di sudo."
+    fi
+    echo
+
+    if ! confirm_action "Procedo?"; then
+        echo "Nessun programma installato."
+        return 0
+    fi
+
+    local failed="" url port_bin=""
+    if [ "$MAC_PM" = port ]; then
+        port_bin="$(command -v port)"
+    fi
+
+    # Uno alla volta: un pacchetto che fallisce non deve bloccare gli altri.
+    while IFS= read -r pkg; do
+        [ -n "$pkg" ] || continue
+        echo ">>> installo $pkg"
+        case "$MAC_PM" in
+            brew) brew install "$pkg" || failed+=" $pkg" ;;
+            port) sudo "$port_bin" -N install "$pkg" || failed+=" $pkg" ;;
+        esac
+    done <<< "$to_install"
+
+    while IFS= read -r pkg; do
+        [ -n "$pkg" ] || continue
+        echo ">>> setrequested $pkg"
+        sudo "$port_bin" setrequested "$pkg" || failed+=" $pkg"
+    done <<< "$to_request"
+
+    while read -r cmd url; do
+        [ -n "$cmd" ] || continue
+        echo ">>> installo $cmd da $url"
+        curl -fsSL "$url" | bash || failed+=" $cmd"
+    done <<< "$to_script"
+
+    refresh_macos_path
+    if [ -n "$failed" ]; then
+        echo "Installazione fallita per:$failed" >&2
+        TOOLS_FAILED=1
+    fi
+}
+
+app_is_present() {
+    [ -d "/Applications/$1.app" ] || [ -d "$HOME/Applications/$1.app" ]
+}
+
+# Sempre in fondo all'output: le app non hanno un gestore che le installi.
+print_manual_apps() {
+    local kind a b c name
+    echo
+    echo "App grafiche: vanno installate a mano."
+    while IFS='|' read -r kind a b c; do
+        [ "$(trim "$kind")" = app ] || continue
+        name="$(trim "$a")"
+        if app_is_present "$name"; then
+            printf '  [ok]    %-18s %s\n' "$name" "$(trim "$b")"
+        else
+            printf '  [manca] %-18s %s\n' "$name" "$(trim "$b")"
+        fi
+    done < <(manifest_rows)
+}
+
+run_audit() {
+    local kind a b c cmd pkg name where
+    local declared_pkgs="" declared_cmds="" declared_apps="" ignored=""
+    local missing=0 has_pm=0
+
+    if detect_macos_pm; then
+        has_pm=1
+        load_pm_state
+        echo "Gestore di pacchetti: $MAC_PM"
+    else
+        echo "Gestore di pacchetti: nessuno (né brew né MacPorts)"
+    fi
+
+    echo
+    echo "Programmi dichiarati in tools.txt:"
+    while IFS='|' read -r kind a b c; do
+        kind="$(trim "$kind")"
+        cmd="$(trim "$a")"
+        case "$kind" in
+            pkg)
+                declared_cmds+="$cmd$NL"
+                pkg=""
+                if [ "$has_pm" -eq 1 ]; then
+                    pkg="$(pkg_for_pm "$b" "$c")"
+                fi
+                declared_pkgs+="$pkg$NL"
+                if [ -n "$pkg" ] && list_has "$PM_INSTALLED" "$pkg"; then
+                    if [ "$MAC_PM" = port ] && ! list_has "$PM_REQUESTED" "$pkg"; then
+                        printf '  [orfano] %-15s installato ma non richiesto: port reclaim può rimuoverlo\n' "$cmd"
+                    else
+                        printf '  [ok]     %s\n' "$cmd"
+                    fi
+                elif where="$(command -v "$cmd" 2>/dev/null)"; then
+                    printf '  [fuori]  %-15s non gestito da %s, trovato in %s\n' "$cmd" "${MAC_PM:-alcun gestore}" "$where"
+                    missing=$((missing + 1))
+                else
+                    printf '  [manca]  %s\n' "$cmd"
+                    missing=$((missing + 1))
+                fi
+                ;;
+            script)
+                declared_cmds+="$cmd$NL"
+                if where="$(command -v "$cmd" 2>/dev/null)"; then
+                    printf '  [ok]     %-15s %s\n' "$cmd" "$where"
+                else
+                    printf '  [manca]  %s\n' "$cmd"
+                    missing=$((missing + 1))
+                fi
+                ;;
+            app)    declared_apps+="$cmd$NL" ;;
+            ignore) ignored+="$cmd$NL" ;;
+        esac
+    done < <(manifest_rows)
+
+    echo
+    echo "Installati ma non dichiarati in tools.txt:"
+    local found="" item link pat skip dir entry label
+    add_undeclared() {
+        skip=0
+        while IFS= read -r pat; do
+            [ -n "$pat" ] || continue
+            # shellcheck disable=SC2254  # pat è un glob
+            case "$item" in $pat) skip=1 ;; esac
+        done <<< "$ignored"
+        [ "$skip" -eq 1 ] && return 0
+        printf '  %-28s %s\n' "$item" "$label"
+        found=1
+    }
+
+    if [ "$has_pm" -eq 1 ]; then
+        label="richiesto in $MAC_PM"
+        while IFS= read -r item; do
+            [ -n "$item" ] || continue
+            list_has "$declared_pkgs" "$item" || add_undeclared
+        done <<< "$PM_REQUESTED"
+    fi
+
+    for dir in /usr/local/bin "$HOME/.local/bin"; do
+        label="binario in $dir"
+        for entry in "$dir"/*; do
+            item="${entry##*/}"
+            list_has "$declared_cmds" "$item" && continue
+            if [ -L "$entry" ]; then
+                link="$(readlink "$entry")"
+                case "$link" in
+                    *Cellar*|*Caskroom*|*Homebrew*|*"/${REPO_ROOT##*/}/"*) continue ;;
+                esac
+            fi
+            add_undeclared
+        done
+    done
+
+    label="pacchetto .pkg"
+    while IFS= read -r item; do
+        [ -n "$item" ] || continue
+        add_undeclared
+    done < <(/usr/sbin/pkgutil --pkgs 2>/dev/null | grep -v '^com\.apple\.' || true)
+
+    label="app in /Applications"
+    for entry in /Applications/*.app; do
+        item="${entry##*/}"
+        item="${item%.app}"
+        list_has "$declared_apps" "$item" || add_undeclared
+    done
+    [ -n "$found" ] || echo "  nessuno"
+
+    print_manual_apps
+
+    echo
+    if [ "$missing" -eq 0 ]; then
+        echo "Riepilogo: tutti i programmi dichiarati sono al loro posto."
+    else
+        echo "Riepilogo: $missing programmi da sistemare. Per installarli: ./install.sh --tools"
+    fi
+}
+
+# ============================================================
 # PREFLIGHT CHECK
 # ============================================================
 
@@ -505,6 +802,9 @@ while [[ $# -gt 0 ]]; do
         -y|--yes)     AUTO_INSTALL=1; shift ;;
         --no-install) NO_INSTALL=1;   shift ;;
         --pm=*)       PM_CHOICE="${1#--pm=}"; shift ;;
+        --tools)      TOOLS_MODE="with";  shift ;;
+        --tools-only) TOOLS_MODE="only";  shift ;;
+        --audit)      TOOLS_MODE="audit"; shift ;;
         --shell=*)    SHELL_MODE="${1#--shell=}"; shift ;;
         --shell)
             if [[ -z "${2:-}" ]]; then
@@ -529,6 +829,25 @@ done
 if [ "$AUTO_INSTALL" -eq 1 ] && [ "$NO_INSTALL" -eq 1 ]; then
     echo "Errore: -y e --no-install sono incompatibili." >&2
     exit 1
+fi
+
+if [ -n "$TOOLS_MODE" ]; then
+    if ! is_macos; then
+        echo "Errore: --tools, --tools-only e --audit funzionano solo su macOS." >&2
+        exit 1
+    fi
+    if [ "$MODE" = "unstow" ]; then
+        echo "Errore: -D non si combina con --tools, --tools-only o --audit." >&2
+        exit 1
+    fi
+    if [ "$TOOLS_MODE" != "with" ] && [ ${#EXPLICIT_PKGS[@]} -gt 0 ]; then
+        echo "Errore: --tools-only e --audit non accettano pacchetti Stow." >&2
+        exit 1
+    fi
+    if [ ! -r "$MANIFEST" ]; then
+        echo "Errore: manifest non trovato: $MANIFEST" >&2
+        exit 1
+    fi
 fi
 
 case "$PM_CHOICE" in
@@ -578,6 +897,27 @@ if ! TARGET="$(cd "$TARGET" && pwd)"; then
     echo "Errore: impossibile risolvere il path assoluto del target." >&2
     exit 1
 fi
+
+# ============================================================
+# PROGRAMMI
+# ============================================================
+
+case "$TOOLS_MODE" in
+    audit)
+        run_audit
+        exit 0
+        ;;
+    only)
+        trap print_manual_apps EXIT
+        run_tools
+        exit "$TOOLS_FAILED"
+        ;;
+    with)
+        # Prima dello stow, che è tra i programmi; l'elenco delle app va in fondo.
+        trap print_manual_apps EXIT
+        run_tools
+        ;;
+esac
 
 # ============================================================
 # PREFLIGHT CHECK
@@ -675,3 +1015,5 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 else
     echo "Fatto: ${#PKGS[@]} pacchetti processati."
 fi
+
+exit "$TOOLS_FAILED"

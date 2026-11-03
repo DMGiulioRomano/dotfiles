@@ -1,0 +1,61 @@
+# tools.txt — tutto ciò che serve oltre a macOS, letto da install.sh
+# (--tools, --tools-only, --audit). Campi separati da '|'.
+#
+#   pkg    | comando | formula brew | port MacPorts   installato dal gestore
+#   script | comando | url                            installer ufficiale via curl
+#   app    | nome    | url                            app grafica, solo elencata
+#   ignore | glob                                     --audit non lo segnala
+#
+# Nella colonna "comando" va un nome che esiste solo se il pacchetto è
+# installato (gls per coreutils): serve a --audit per dire che lo stesso
+# comando è presente fuori dal gestore.
+
+# ---------- Comandi da shell ----------
+pkg | nvim           | neovim         | neovim
+pkg | tmux           | tmux           | tmux
+pkg | gmake          | make           | gmake
+pkg | gls            | coreutils      | coreutils
+pkg | gfind          | findutils      | findutils
+pkg | ggrep          | grep           | grep
+pkg | gsed           | gnu-sed        | gsed
+pkg | bash           | bash           | bash
+pkg | bat            | bat            | bat
+pkg | highlight      | highlight      | highlight
+pkg | stow           | stow           | stow
+pkg | shellcheck     | shellcheck     | shellcheck
+pkg | colima         | colima         | colima
+pkg | docker         | docker         | docker
+pkg | docker-compose | docker-compose | docker-compose
+pkg | pandoc         | pandoc         | pandoc
+pkg | typst          | typst          | typst
+pkg | tree           | tree           | tree
+pkg | gh             | gh             | gh
+pkg | uv             | uv             | uv
+
+# ---------- Installer ufficiali ----------
+script | claude | https://claude.ai/install.sh
+
+# ---------- App grafiche: vanno installate a mano ----------
+app | Brave Browser    | https://brave.com/download/
+app | Firefox          | https://www.mozilla.org/firefox/new/
+app | OBS              | https://obsproject.com/download
+app | Obsidian         | https://obsidian.md/download
+app | OpenWhispr       | https://openwhispr.com/
+app | Pritunl          | https://client.pritunl.com/
+app | Rectangle        | https://rectangleapp.com/
+app | Sonic Visualiser | https://www.sonicvisualiser.org/download.html
+app | VirtualBox       | https://www.virtualbox.org/wiki/Downloads
+app | WezTerm          | https://wezterm.org/install/macos.html
+
+# ---------- Da non segnalare in --audit ----------
+# Parti di cose già elencate sopra, o di macOS.
+ignore | Safari
+ignore | uvx
+ignore | pandoc-*
+ignore | VBox*
+ignore | vbox*
+ignore | VirtualBox*
+ignore | org.virtualbox.*
+ignore | com.pritunl.*
+ignore | net.johnmacfarlane.pandoc
+ignore | org.macports.*
