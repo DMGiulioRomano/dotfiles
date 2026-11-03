@@ -30,6 +30,7 @@ pkg | docker-compose | docker-compose | docker-compose
 pkg | pandoc         | pandoc         | pandoc
 pkg | typst          | typst          | typst
 pkg | tree           | tree           | tree
+pkg | htop           | htop           | htop
 pkg | gh             | gh             | gh
 pkg | uv             | uv             | uv
 
