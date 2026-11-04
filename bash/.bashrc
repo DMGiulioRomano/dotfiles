@@ -123,3 +123,8 @@ HISTCONTROL=ignoreboth
 HISTSIZE=10000
 HISTFILESIZE=20000
 shopt -s histappend
+
+# All'apertura del terminale entra nella sessione tmux predefinita
+if [ -z "$TMUX" ] && [ -t 0 ] && [ -t 1 ] && [ -x "$HOME/.local/bin/tmux-main" ]; then
+    "$HOME/.local/bin/tmux-main"
+fi
