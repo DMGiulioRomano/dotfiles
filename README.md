@@ -81,7 +81,7 @@ nuovo, ti dice che va aggiunto alla lista.
 | `zsh`       | `~/.zshrc`, `~/.zprofile` (sourcano `~/.aliases`) |
 | `bash`      | `~/.bashrc`, `~/.bash_profile` (sourcano `~/.aliases`) |
 | `local-bin` | `~/.local/bin/concat` + man page |
-| `config`    | `~/.config/nvim/init.lua`, `~/.config/wezterm/wezterm.lua`, `~/.vimrc` |
+| `config`    | `~/.config/nvim/init.lua`, `~/.config/wezterm/wezterm.lua`, `~/.vimrc`, `~/.tmux.conf` |
 
 ## Selezione shell
 
