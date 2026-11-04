@@ -1,0 +1,25 @@
+#!/bin/sh
+# Apre la sessione tmux "main", creandola se non esiste.
+S=main
+DIR="$HOME/github/DMGiulioRomano/formazione_sou"
+
+if ! tmux has-session -t "=$S" 2>/dev/null; then
+  # Finestra 0: un pane
+  tmux new-session -d -s "$S" -c "$DIR"
+
+  # Finestra 1: due pane
+  tmux new-window -t "$S:" -c "$HOME"
+  tmux split-window -h -t "$S:" -c "$HOME"
+
+  # Finestra 2: un pane
+  tmux new-window -t "$S:" -c "$DIR"
+
+  tmux select-window -t "$S:0"
+fi
+
+# Dentro tmux cambia sessione, fuori si collega
+if [ -n "$TMUX" ]; then
+  exec tmux switch-client -t "=$S"
+else
+  exec tmux attach -t "=$S"
+fi
