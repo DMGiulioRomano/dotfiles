@@ -77,6 +77,26 @@ config.keys = {
 
 config.color_scheme = 'shades-of-purple'
 
+-- Tab nella barra del titolo, alla stessa altezza dei pulsanti della finestra
+config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
+
+-- Barra del titolo e tab dello stesso viola del tema
+local tema = wezterm.color.get_builtin_schemes()[config.color_scheme]
+config.window_frame = {
+  active_titlebar_bg = tema.background,
+  inactive_titlebar_bg = tema.background,
+}
+config.colors = {
+  tab_bar = {
+    inactive_tab_edge = tema.background,
+    active_tab = { bg_color = tema.ansi[5], fg_color = tema.foreground },
+    inactive_tab = { bg_color = tema.background, fg_color = tema.foreground },
+    inactive_tab_hover = { bg_color = tema.ansi[5], fg_color = tema.foreground },
+    new_tab = { bg_color = tema.background, fg_color = tema.foreground },
+    new_tab_hover = { bg_color = tema.ansi[5], fg_color = tema.foreground },
+  },
+}
+
 -- Forza WezTerm a usare il titolo del pannello attivo,
 -- aggirando il problema di Neovim con TERM=wezterm
 wezterm.on('format-tab-title', function(tab)
