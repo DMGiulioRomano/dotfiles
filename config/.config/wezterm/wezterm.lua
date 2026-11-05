@@ -61,6 +61,18 @@ config.keys = {
     mods = 'SUPER',
     action = wezterm.action.SendKey { mods = 'CTRL', key = 'e' },
   },
+  -- Cmd + Freccia Su → Pagina su (scorre la chat di Claude Code)
+  {
+    key = 'UpArrow',
+    mods = 'SUPER',
+    action = wezterm.action.SendKey { key = 'PageUp' },
+  },
+  -- Cmd + Freccia Giù → Pagina giù
+  {
+    key = 'DownArrow',
+    mods = 'SUPER',
+    action = wezterm.action.SendKey { key = 'PageDown' },
+  },
 }
 
 config.color_scheme = 'shades-of-purple'
