@@ -124,7 +124,9 @@ HISTSIZE=10000
 HISTFILESIZE=20000
 shopt -s histappend
 
-# All'apertura del terminale entra nella sessione tmux predefinita
-if [ -z "$TMUX" ] && [ -t 0 ] && [ -t 1 ] && [ -x "$HOME/.local/bin/tmux-main" ]; then
+# All'apertura del terminale entra nella sessione tmux predefinita,
+# solo se non ha gia' un client collegato: le altre tab restano bash normali
+if [ -z "$TMUX" ] && [ -t 0 ] && [ -t 1 ] && [ -x "$HOME/.local/bin/tmux-main" ] \
+   && [ -z "$(tmux list-clients -t "=main" 2>/dev/null)" ]; then
     "$HOME/.local/bin/tmux-main"
 fi
