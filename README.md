@@ -80,7 +80,7 @@ nuovo, ti dice che va aggiunto alla lista.
 | `shell`     | `~/.aliases` — alias condivisi fra zsh e bash |
 | `zsh`       | `~/.zshrc`, `~/.zprofile` (sourcano `~/.aliases`) |
 | `bash`      | `~/.bashrc`, `~/.bash_profile` (sourcano `~/.aliases`) |
-| `local-bin` | `~/.local/bin/concat` + man page, `~/.local/bin/tmux-main`, `~/.local/bin/tmux-window-colors` |
+| `local-bin` | `~/.local/bin/concat` + man page, `~/.local/bin/tmux-main` |
 | `config`    | `~/.config/nvim/init.lua`, `~/.config/wezterm/wezterm.lua`, `~/.vimrc`, `~/.tmux.conf` |
 
 ## Selezione shell
