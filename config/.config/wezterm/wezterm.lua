@@ -75,7 +75,16 @@ config.keys = {
   },
 }
 
-config.color_scheme = 'shades-of-purple'
+-- Tema in funzione della modalità di sistema (chiara/scura).
+-- WezTerm ricarica la config da solo quando la modalità cambia.
+local function tema_per_aspetto()
+  if wezterm.gui and not wezterm.gui.get_appearance():find('Dark') then
+    return 'Catppuccin Latte'
+  end
+  return 'shades-of-purple'
+end
+
+config.color_scheme = tema_per_aspetto()
 
 -- Tab nella barra del titolo, alla stessa altezza dei pulsanti della finestra
 config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
